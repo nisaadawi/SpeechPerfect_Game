@@ -1,4 +1,7 @@
 import sys
+import os
+import csv
+import glob
 import torch
 import torch.nn.functional as F
 import librosa
@@ -62,15 +65,80 @@ def predict_stress(audio_path, threshold=0.5):
 
     return stress_prob, stress_label, logit_not_stress, logit_stress
 
-# Run example
+# Run batch processing on all audio files
 if __name__ == "__main__":
-    audio_file = r"C:\Users\user\OneDrive\Documents\FYP ND\RenPy_Game\SpeechPerfect\module\audio\glen_powel.wav"
-    stress_prob, stress_label, logit0, logit1 = predict_stress(audio_file)
-
-    print(f"Logit 0 (Not Stressed): {logit0:.4f}")
-    print(f"Logit 1 (Stressed):     {logit1:.4f}")
-    print(f"\nStress Probability: {stress_prob*100:.2f}%") # convert probability to percentage
-    print(f"Predicted Label:    {stress_label}")
+    # Path to audio folder
+    audio_folder = r"C:\Users\user\OneDrive\Documents\FYP ND\RenPy_Game\SpeechPerfect\module\audio"
+    
+    # Find all audio files (common audio formats)
+    audio_extensions = ['*.wav', '*.mp3', '*.flac', '*.m4a', '*.ogg']
+    audio_files = []
+    for ext in audio_extensions:
+        audio_files.extend(glob.glob(os.path.join(audio_folder, ext)))
+        audio_files.extend(glob.glob(os.path.join(audio_folder, ext.upper())))
+    
+    # Filter out CSV files
+    audio_files = [f for f in audio_files if not f.endswith('.csv')]
+    
+    if not audio_files:
+        print(f"No audio files found in {audio_folder}")
+        sys.exit(1)
+    
+    print(f"Found {len(audio_files)} audio file(s) to process...")
+    print("-" * 80)
+    
+    # Prepare CSV output file path
+    csv_output_path = os.path.join(audio_folder, "studentnet_results.csv")
+    
+    # Process all audio files and collect results
+    results = []
+    for idx, audio_file in enumerate(audio_files, 1):
+        file_name = os.path.basename(audio_file)
+        print(f"[{idx}/{len(audio_files)}] Processing: {file_name}")
+        
+        try:
+            stress_prob, stress_label, logit0, logit1 = predict_stress(audio_file)
+            
+            # Store results
+            results.append({
+                'file_name': file_name,
+                'file_path': audio_file,
+                'logit_0': logit0,
+                'logit_1': logit1,
+                'probability': stress_prob,
+                'predicted_label': stress_label
+            })
+            
+            print(f"  ✓ Logit 0 (Not Stressed): {logit0:.4f}")
+            print(f"  ✓ Logit 1 (Stressed):     {logit1:.4f}")
+            print(f"  ✓ Stress Probability: {stress_prob*100:.2f}%")
+            print(f"  ✓ Predicted Label:    {stress_label}")
+            print()
+            
+        except Exception as e:
+            print(f"  ✗ Error processing {file_name}: {str(e)}")
+            print()
+            # Still add entry with error info
+            results.append({
+                'file_name': file_name,
+                'file_path': audio_file,
+                'logit_0': None,
+                'logit_1': None,
+                'probability': None,
+                'predicted_label': f'Error: {str(e)}'
+            })
+    
+    # Write results to CSV file
+    print(f"\nWriting results to: {csv_output_path}")
+    csv_columns = ['file_name', 'file_path', 'logit_0', 'logit_1', 'probability', 'predicted_label']
+    
+    with open(csv_output_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=csv_columns)
+        writer.writeheader()
+        writer.writerows(results)
+    
+    print(f"✅ Successfully processed {len([r for r in results if r['logit_0'] is not None])} file(s)")
+    print(f"✅ Results saved to: {csv_output_path}")
 
 
 

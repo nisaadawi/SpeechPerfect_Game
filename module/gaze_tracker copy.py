@@ -1,0 +1,211 @@
+import threading
+import cv2
+from gaze_tracking import GazeTracking
+
+
+def _compute_focus(gaze: GazeTracking) -> bool:
+    blink = gaze.is_blinking()
+    if blink is True:
+        return False
+
+    center = gaze.is_center()
+    return bool(center)
+
+
+class GazeTracker:
+    """Continuously estimate gaze focus state in a background thread."""
+
+    def __init__(self, camera_index=0, show_window=False, window_name="Gaze Tracker"):
+        self.camera_index = camera_index
+        self.show_window = show_window
+        self.window_name = window_name
+        self.focused = False
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._callback = None
+        self._gaze = GazeTracking()
+        self._frame_lock = threading.Lock()
+        self._latest_frame = None
+        self._display_info_callback = None  # Callback to get additional display info
+
+    def start(self, callback=None, display_info_callback=None):
+        if self.is_running():
+            return
+        self._callback = callback
+        self._display_info_callback = display_info_callback
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        if not self.is_running():
+            return
+        self._stop_event.set()
+        self._thread.join()
+        self._thread = None
+
+    def is_running(self):
+        return self._thread is not None and self._thread.is_alive()
+
+    def _loop(self):
+        cap = cv2.VideoCapture(self.camera_index)
+
+        try:
+            while not self._stop_event.is_set():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                self._gaze.refresh(frame)
+                focused = _compute_focus(self._gaze)
+                self.focused = focused
+
+                annotated = self._gaze.annotated_frame()
+                if annotated is None:
+                    annotated = frame.copy()
+
+                # Display basic focus status
+                cv2.putText(
+                    annotated,
+                    f"Focused: {focused}",
+                    (30, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0) if focused else (0, 0, 255),
+                    2,
+                )
+                
+                # Get additional display info from callback if available
+                if self._display_info_callback:
+                    try:
+                        display_info = self._display_info_callback()
+                        if display_info:
+                            y_offset = 60
+                            line_height = 30
+                            
+                            # Display gaze direction
+                            if 'gaze_direction' in display_info:
+                                direction = display_info['gaze_direction']
+                                color = (0, 255, 255) if direction == "center" else (0, 165, 255) if direction in ["left", "right"] else (128, 128, 128)
+                                cv2.putText(
+                                    annotated,
+                                    f"Gaze: {direction.upper()}",
+                                    (30, y_offset),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.7,
+                                    color,
+                                    2,
+                                )
+                                y_offset += line_height
+                            
+                            # Display movement count
+                            if 'movement_count' in display_info:
+                                cv2.putText(
+                                    annotated,
+                                    f"Movements: {display_info['movement_count']}",
+                                    (30, y_offset),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.7,
+                                    (255, 255, 0),
+                                    2,
+                                )
+                                y_offset += line_height
+                            
+                            # Display elapsed time
+                            if 'elapsed_time' in display_info:
+                                elapsed = display_info['elapsed_time']
+                                cv2.putText(
+                                    annotated,
+                                    f"Time: {elapsed/60:.1f} min",
+                                    (30, y_offset),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.7,
+                                    (255, 255, 255),
+                                    2,
+                                )
+                                y_offset += line_height
+                            
+                            # Display heart rate if available
+                            if 'heart_rate' in display_info and display_info['heart_rate']:
+                                cv2.putText(
+                                    annotated,
+                                    f"HR: {display_info['heart_rate']:.0f} BPM",
+                                    (30, y_offset),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.7,
+                                    (0, 0, 255),
+                                    2,
+                                )
+                                y_offset += line_height
+                            
+                            # Display not focus periods if available
+                            if 'not_focus_periods' in display_info:
+                                cv2.putText(
+                                    annotated,
+                                    f"Not Focus (>=5s): {display_info['not_focus_periods']}",
+                                    (30, y_offset),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.7,
+                                    (0, 0, 255) if display_info['not_focus_periods'] > 0 else (0, 255, 0),
+                                    2,
+                                )
+                    except Exception as e:
+                        pass  # Silently fail if display info callback has issues
+
+                with self._frame_lock:
+                    self._latest_frame = annotated.copy()
+
+                if self._callback:
+                    self._callback(focused)
+
+                if self.show_window:
+                    cv2.imshow(self.window_name, annotated)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        self._stop_event.set()
+
+        finally:
+            cap.release()
+            if self.show_window:
+                cv2.destroyWindow(self.window_name)
+
+
+    def get_latest_frame(self):
+        with self._frame_lock:
+            if self._latest_frame is None:
+                return None
+            return self._latest_frame.copy()
+
+
+def check_focus():
+    gaze = GazeTracking()
+    cap = cv2.VideoCapture(0)
+    focused = False
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        gaze.refresh(frame)
+        focused = _compute_focus(gaze)
+        annotated = gaze.annotated_frame()
+        if annotated is None:
+            annotated = frame.copy()
+        cv2.putText(
+            annotated,
+            f"Focused: {focused}",
+            (30, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0) if focused else (0, 0, 255),
+            2,
+        )
+        cv2.imshow("Gaze Tracker", annotated)
+
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return focused
