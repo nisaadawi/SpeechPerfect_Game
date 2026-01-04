@@ -140,4 +140,8 @@ The system automatically detects speaking personas based on performance:
 <img width="600" height="300" alt="calibrationPage" src="https://github.com/user-attachments/assets/8c8711b8-0a61-4d4e-b75b-4bd035efb83a" />
 
 
+## 🙏 Acknowledgments
 
+- GazeTracking library by Antoine Lamé
+- StudentNet model from Hugging Face
+- OpenAI Whisper for speech recognition
