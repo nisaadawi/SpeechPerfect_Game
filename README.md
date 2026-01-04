@@ -2,7 +2,7 @@
 
 **AI-Powered Multimodal Speech Assessment System**
 
-SpeechPerfect is a comprehensive speech analysis platform that combines multiple modalities (speech, eye tracking, heart rate monitoring, and emotion recognition) to provide real-time feedback and assessment of public speaking performance. The system includes a gamified training environment built with Ren'Py and a modern React-based dashboard for detailed analytics.
+SpeechPerfect is a comprehensive speech analysis platform that combines multiple modalities (speech, eye tracking, heart rate monitoring, and emotion recognition) to provide real-time feedback and assessment of public speaking performance. The system includes a gamified training environment built with a modern React-based dashboard for detailed analytics.
 
 ## 🌟 Features
 
@@ -75,11 +75,6 @@ SpeechPerfect is a comprehensive speech analysis platform that combines multiple
   - Game setup and calibration
   - Session reports and analytics
   - Persona visualization
-
-- **Ren'Py Game** (`game_renpy_old/`): Visual novel game environment
-  - Interactive speech practice scenarios
-  - Real-time feedback integration
-  - Multiple difficulty levels
 
 ### Hardware Integration
 - **Arduino Sensors** (`arduino/`, `sensor_hr_bpm/`): Heart rate monitoring
